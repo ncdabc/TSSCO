@@ -491,7 +491,9 @@ $dataDates = $dateLabels;   // value(Ymd) => label
 $selecteddataDate = isset($_GET['data_date']) ? trim($_GET['data_date']) : '';
 if ($selecteddataDate === '' || !isset($dataDates[$selecteddataDate])) {
     $mdKeys = array_keys($dataDates);
-    $selecteddataDate = isset($mdKeys[0]) ? $mdKeys[0] : '';  // 預設取最新一筆（已依日期倒序排列）
+    // 注意：PHP 會把數字字串 key 自動轉成 int，這裡強制轉回字串，
+    //       後續與 GET 參數（字串）及 sortkey（字串）做 === 比較才會成立
+    $selecteddataDate = isset($mdKeys[0]) ? (string)$mdKeys[0] : '';  // 預設取最新一筆（已依日期倒序排列）
 }
 $currentdataLabel = ($selecteddataDate !== '' && isset($dataDates[$selecteddataDate]))
     ? $dataDates[$selecteddataDate] : '無資料';
@@ -507,7 +509,7 @@ echo '</div>';
 
 echo '</nav>';  // close sidebar
 echo '<div id="main-content">';
-echo '<div id="page-title"><h1>原始保證金彙總</h1><span class="subtitle">Original Margin</span></div>';
+echo '<div id="page-title"><h1>原始保證金彙總</h1><span class="subtitle">Initial Margin</span></div>';
 echo '<div class="page-note">單位：台幣元　｜　點擊列首 ⊟ / ⊞ 可摺疊或展開明細列</div>';
 
 // ── 資料檔錯誤（防呆：明確顯示，不留白畫面）──
@@ -526,6 +528,7 @@ echo '<form method="get" action="" class="data-filter">';
 echo '  <label for="data_date">資料日期：</label>';
 echo '  <select name="data_date" id="data_date">';
 foreach ($dataDates as $val => $lab) {
+    $val = (string)$val;   // key 轉回字串，selected 比對才會成立
     $sel = ($val === $selecteddataDate) ? ' selected' : '';
     echo '<option value="'.htmlspecialchars($val).'"'.$sel.'>'.htmlspecialchars($lab).'</option>';
 }
@@ -552,9 +555,14 @@ foreach ($csvRows as $r) {
     $tagSet[$tag] = true;
 }
 
-// ── 欄位順序：Tag 排序（與 Excel 樞紐相同）──
+// ── 欄位順序：期貨自營商固定放第一欄（緊接部門/姓名），其餘 Tag 照排序 ──
 $tagCols = array_keys($tagSet);
 sort($tagCols);
+$mgSelfIdx = array_search('期貨自營商', $tagCols, true);
+if ($mgSelfIdx !== false) {
+    unset($tagCols[$mgSelfIdx]);
+    array_unshift($tagCols, '期貨自營商');
+}
 
 // ── 部門順序：沿用既有部門排序，未列到的接在後面 ──
 $deptOrder = array('自營部', '衍生商品部', '計量交易部', '債券交易部', '債券承銷部', '債券商品部');
@@ -578,13 +586,20 @@ foreach ($tagCols as $c) { echo '<th>'.htmlspecialchars($c).'</th>'; }
 echo '<th>總計</th>';
 echo '</tr></thead><tbody>';
 
-$pv_initial_collapsed = array();   // 預設全部展開（同 Excel 樞紐）；保留機制供之後調整
+$pv_initial_collapsed = array();   // 預設全部「摺疊」：下方部門迴圈會把每個部門 id 加進來
 $grand = array();                  // tag => 總計
 $grandAll = 0;
 
 foreach ($deptSorted as $dept) {
-    $names = array_keys($pivot[$dept]);
-    sort($names);
+    // 修改 2：姓名依「總計」欄由大到小排序
+    $nameTotals = array();
+    foreach ($pivot[$dept] as $name => $tv) {
+        $s = 0;
+        foreach ($tv as $v) { $s += $v; }
+        $nameTotals[$name] = $s;
+    }
+    arsort($nameTotals);
+    $names = array_keys($nameTotals);
 
     // 部門小計
     $deptTot = array();
@@ -601,11 +616,12 @@ foreach ($deptSorted as $dept) {
     }
 
     $id = 'd_'.substr(md5($dept), 0, 10);
+    $pv_initial_collapsed[] = $id;   // 修改 1：預設摺疊此部門
 
-    // ── 部門列（階層一，可收合）──
+    // ── 部門列（階層一，可收合；預設摺疊故按鈕顯示＋）──
     echo '<tr class="pv-lv0">';
     echo '<td class="pv-label">';
-    echo '<button type="button" class="pv-toggle" id="btn_'.$id.'" onclick="togglePivotRow(\''.$id.'\')">－</button>';
+    echo '<button type="button" class="pv-toggle" id="btn_'.$id.'" onclick="togglePivotRow(\''.$id.'\')">＋</button>';
     echo htmlspecialchars($dept).'</td>';
     foreach ($tagCols as $t) { echo mg_fmt(isset($deptTot[$t]) ? $deptTot[$t] : 0, isset($deptTot[$t])); }
     echo mg_fmt($deptAll, true);
@@ -616,7 +632,7 @@ foreach ($deptSorted as $dept) {
         $tv = $pivot[$dept][$name];
         $rowAll = 0;
         foreach ($tv as $v) { $rowAll += $v; }
-        echo '<tr class="pv-lv1" data-anc="'.$id.'">';
+        echo '<tr class="pv-lv1" data-anc="'.$id.'" style="display:none">';
         echo '<td class="pv-label"><span class="pv-leaf-spacer"></span>'.htmlspecialchars($name).'</td>';
         foreach ($tagCols as $t) { echo mg_fmt(isset($tv[$t]) ? $tv[$t] : 0, isset($tv[$t])); }
         echo mg_fmt($rowAll, true);
