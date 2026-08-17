@@ -346,7 +346,6 @@
 $serverName = "172.24.26.41"; //serverName\instanceName
 $connectionInfo = array( "Database"=>"MDoutput", "UID"=>"sa", "PWD"=>"TsscojblMD!", "CharacterSet" => "UTF-8");
 $conn = sqlsrv_connect( $serverName, $connectionInfo);
-
 if(!empty($_SERVER['HTTP_CLIENT_IP'])){
 
    $myip = $_SERVER['HTTP_CLIENT_IP'];
@@ -375,7 +374,6 @@ $home_sql =  sqlsrv_query($conn, "
 $i=0;
 
 $user=array();
-
  while($row = sqlsrv_fetch_array($home_sql, SQLSRV_FETCH_ASSOC)){
   	$arrcnt=0;
 	foreach ($row as $value )
@@ -487,7 +485,6 @@ if ($csvError === '') {
 // ── 日期清單（新 → 舊）＋選定日期（同 Investment_Meeting.php 邏輯：預設最新）──
 krsort($dateLabels);
 $dataDates = $dateLabels;   // value(Ymd) => label
-
 $selecteddataDate = isset($_GET['data_date']) ? trim($_GET['data_date']) : '';
 if ($selecteddataDate === '' || !isset($dataDates[$selecteddataDate])) {
     $mdKeys = array_keys($dataDates);
