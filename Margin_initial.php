@@ -420,7 +420,7 @@ if ($csvError === '') {
     if ($raw === false) {
         $csvError = '資料檔無法讀取：'.$csvPath;
     } else {
-        if (substr($raw, 0, 3) === "\xEF\xBB\xBF") { $raw = substr($raw, 3); }  // UTF-8 BOM
+        $raw = str_replace("\xEF\xBB\xBF", '', $raw);  // 移除所有 UTF-8 BOM（含逐日 append 導致每列列首各帶一個 BOM 的情況）
         if (!mb_check_encoding($raw, 'UTF-8')) {
             $conv = @iconv('CP950', 'UTF-8//IGNORE', $raw);   // Big5 轉 UTF-8
             if ($conv !== false && $conv !== '') { $raw = $conv; }
