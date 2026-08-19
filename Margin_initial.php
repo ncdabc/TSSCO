@@ -3,6 +3,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>原始保證金彙總</title>
+  <script src="plotly-latest.min.js"></script>
   <link rel="stylesheet" href="http://172.24.26.42:80/myCss/myBtn.css">
   <link rel="stylesheet" href="http://172.24.26.42:80/myCss/huBtn20180110.css">
   <link rel="stylesheet" href="http://172.24.26.42:80/myCss/HuTable.css">
@@ -650,6 +651,111 @@ if (empty($pivot)) {
     echo '<div class="table-card"><div class="top5-empty">所選日期（'
        . htmlspecialchars($currentdataLabel).'）無任何資料。</div></div>';
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// ★ 時間序列圖（新增）：以 CSV「全部日期」繪製，不受上方日期篩選影響
+//   圖1 期貨自營商、圖2 台新期貨、圖3 群益期貨＋元大期貨加總，各依部門畫線
+// ═══════════════════════════════════════════════════════════════════
+
+$chartGroups = array(
+    'ch_self' => array('title' => '期貨自營商',           'tags' => array('期貨自營商')),
+    'ch_tsc'  => array('title' => '台新期貨',             'tags' => array('台新期貨')),
+    'ch_kyy'  => array('title' => '群益期貨＋元大期貨',   'tags' => array('群益期貨', '元大期貨')),
+);
+
+// 全部日期（舊 → 新）與顯示標籤
+$chartDatesAsc = array();
+foreach ($dataDates as $k => $lab) { $chartDatesAsc[] = (string)$k; }
+sort($chartDatesAsc);
+$chartXLabels = array();
+foreach ($chartDatesAsc as $sk) { $chartXLabels[] = $dataDates[$sk]; }
+
+// 彙總：群組 => 部門 => 日期 => 金額
+$chartAgg = array();
+foreach ($csvRows as $r) {
+    foreach ($chartGroups as $g => $cfg) {
+        if (in_array($r['tag'], $cfg['tags'], true)) {
+            $d = ($r['dept'] !== '') ? $r['dept'] : '(未填部門)';
+            if (!isset($chartAgg[$g]))                        { $chartAgg[$g] = array(); }
+            if (!isset($chartAgg[$g][$d]))                    { $chartAgg[$g][$d] = array(); }
+            if (!isset($chartAgg[$g][$d][$r['sortkey']]))     { $chartAgg[$g][$d][$r['sortkey']] = 0; }
+            $chartAgg[$g][$d][$r['sortkey']] += $r['amt'];
+        }
+    }
+}
+
+// 部門固定配色（三張圖同部門同色，依 $deptOrder 序）
+$chartPalette = array('#8064A2', '#2E5C8A', '#C0504D', '#4CAF7D', '#E8A33D', '#5B9BD5', '#7F7F7F', '#BC6C25');
+$chartDeptColor = array();
+$ci = 0;
+foreach ($deptOrder as $d) { $chartDeptColor[$d] = $chartPalette[$ci % count($chartPalette)]; $ci++; }
+
+// 各群組輸出序列（部門順序沿用 $deptOrder，未列到的接在後面；無資料日期給 null 斷線）
+$chartPayload = array();
+foreach ($chartGroups as $g => $cfg) {
+    $deptsHere = array();
+    if (isset($chartAgg[$g])) {
+        foreach ($deptOrder as $d)      { if (isset($chartAgg[$g][$d])) { $deptsHere[] = $d; } }
+        foreach ($chartAgg[$g] as $d => $x) { if (!in_array($d, $deptsHere, true)) { $deptsHere[] = $d; } }
+    }
+    $series = array();
+    foreach ($deptsHere as $d) {
+        if (!isset($chartDeptColor[$d])) { $chartDeptColor[$d] = $chartPalette[$ci % count($chartPalette)]; $ci++; }
+        $ys = array();
+        foreach ($chartDatesAsc as $sk) {
+            $ys[] = isset($chartAgg[$g][$d][$sk]) ? $chartAgg[$g][$d][$sk] : null;
+        }
+        $series[] = array('name' => $d, 'y' => $ys, 'color' => $chartDeptColor[$d]);
+    }
+    $chartPayload[$g] = array('title' => $cfg['title'], 'series' => $series);
+}
+
+echo '<div class="section-block">';
+echo '<div class="section-header"><h2>原始保證金走勢圖</h2><div class="section-divider"></div><span class="section-badge">全部日期</span></div>';
+echo '<div class="page-note">以資料檔全部日期（'.htmlspecialchars($chartXLabels ? $chartXLabels[0] : '-').' ~ '
+   . htmlspecialchars($chartXLabels ? $chartXLabels[count($chartXLabels)-1] : '-')
+   . '）繪製，不受上方日期篩選影響。單位：台幣元。</div>';
+foreach ($chartPayload as $g => $p) {
+    echo '<div class="table-card" style="margin-bottom:16px;">';
+    echo '<div style="font-weight:600;font-size:15px;padding:12px 14px 0 14px;">'.htmlspecialchars($p['title']).'－各部門</div>';
+    echo '<div id="'.$g.'" style="width:100%;height:380px;"></div>';
+    echo '</div>';
+}
+echo '</div>';
+
+echo '<script>
+var CHART_X = '.json_encode($chartXLabels, JSON_UNESCAPED_UNICODE).';
+var CHART_DATA = '.json_encode($chartPayload, JSON_UNESCAPED_UNICODE).';
+function renderMarginCharts(){
+  if (typeof Plotly === "undefined") {
+    // 防呆：plotly-latest.min.js 不在同目錄時明確顯示，不留空白區塊
+    Object.keys(CHART_DATA).forEach(function(g){
+      var el = document.getElementById(g);
+      if (el) { el.innerHTML = \'<div style="padding:24px;color:#b45309;">載入不到 plotly-latest.min.js，請將該檔與本頁放在同一目錄（可從 Investment_Meeting.php 所在目錄複製）。</div>\'; }
+    });
+    return;
+  }
+  Object.keys(CHART_DATA).forEach(function(g){
+    var p = CHART_DATA[g];
+    var traces = p.series.map(function(s){
+      return {
+        x: CHART_X, y: s.y, name: s.name,
+        type: "scatter", mode: "lines+markers", connectgaps: false,
+        line: { color: s.color, width: 2 }, marker: { color: s.color, size: 4 }
+      };
+    });
+    Plotly.newPlot(g, traces, {
+      margin: { l: 90, r: 20, t: 10, b: 60 },
+      legend: { orientation: "h", y: 1.12 },
+      font: { family: "\'Noto Sans TC\', sans-serif", size: 12 },
+      xaxis: { type: "category", tickangle: -45, nticks: 12 },
+      yaxis: { tickformat: ",.0f", rangemode: "tozero" },
+      hovermode: "x unified"
+    }, { displayModeBar: false, responsive: true });
+  });
+}
+renderMarginCharts();
+</script>';
 
 if (!$conn) { echo '<div class="page-note">資料庫連線失敗（權限檢查用）：'.htmlspecialchars($serverName).'</div>'; }
 
