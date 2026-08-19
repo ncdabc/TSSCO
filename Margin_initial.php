@@ -708,6 +708,18 @@ foreach ($chartGroups as $g => $cfg) {
         }
         $series[] = array('name' => $d, 'y' => $ys, 'color' => $chartDeptColor[$d]);
     }
+    // Total 線：當日各部門加總（黑色粗線；該日所有部門皆無資料則 null 斷線）
+    if (!empty($deptsHere)) {
+        $totYs = array();
+        foreach ($chartDatesAsc as $sk) {
+            $sum = 0; $has = false;
+            foreach ($deptsHere as $d) {
+                if (isset($chartAgg[$g][$d][$sk])) { $sum += $chartAgg[$g][$d][$sk]; $has = true; }
+            }
+            $totYs[] = $has ? $sum : null;
+        }
+        $series[] = array('name' => 'Total', 'y' => $totYs, 'color' => '#111827', 'width' => 3);
+    }
     $chartPayload[$g] = array('title' => $cfg['title'], 'series' => $series);
 }
 
@@ -742,7 +754,7 @@ function renderMarginCharts(){
       return {
         x: CHART_X, y: s.y, name: s.name,
         type: "scatter", mode: "lines+markers", connectgaps: false,
-        line: { color: s.color, width: 2 }, marker: { color: s.color, size: 4 }
+        line: { color: s.color, width: (s.width || 2) }, marker: { color: s.color, size: 4 }
       };
     });
     Plotly.newPlot(g, traces, {
