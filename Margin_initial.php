@@ -658,6 +658,7 @@ if (empty($pivot)) {
 // ═══════════════════════════════════════════════════════════════════
 
 $chartGroups = array(
+    'ch_all'  => array('title' => '總計（不分期貨商）',   'tags' => array()),   // 空陣列＝全部期貨商合計
     'ch_self' => array('title' => '期貨自營商',           'tags' => array('期貨自營商')),
     'ch_tsc'  => array('title' => '台新期貨',             'tags' => array('台新期貨')),
     'ch_kyy'  => array('title' => '群益期貨＋元大期貨',   'tags' => array('群益期貨', '元大期貨')),
@@ -674,7 +675,7 @@ foreach ($chartDatesAsc as $sk) { $chartXLabels[] = $dataDates[$sk]; }
 $chartAgg = array();
 foreach ($csvRows as $r) {
     foreach ($chartGroups as $g => $cfg) {
-        if (in_array($r['tag'], $cfg['tags'], true)) {
+        if (empty($cfg['tags']) || in_array($r['tag'], $cfg['tags'], true)) {   // 空 tags＝不分期貨商全計
             $d = ($r['dept'] !== '') ? $r['dept'] : '(未填部門)';
             if (!isset($chartAgg[$g]))                        { $chartAgg[$g] = array(); }
             if (!isset($chartAgg[$g][$d]))                    { $chartAgg[$g][$d] = array(); }
